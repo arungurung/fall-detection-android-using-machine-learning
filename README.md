@@ -4,3 +4,5 @@ Research project on the topic "technology in healthcare for fall detection of pa
 Previous submissions are in its own separate branch. There is a different branch for documents used in literature review.
 
 The main file will be updated on the master branch.
+
+Projects will be used to tackle the tasks gradually.
