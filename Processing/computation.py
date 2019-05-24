@@ -20,3 +20,6 @@ RANDOM_SEED = 42
 columns = ['user', 'activity', 'x-axis', 'y-axis', 'z-axis']
 df = pd.read_csv('data/WISDM_ar_v1.1_raw.txt', header=None, names=columns)
 df.head()
+
+# df['activity'].value_counts().plot(
+# kind='bar', title='Training examples by activity type');
