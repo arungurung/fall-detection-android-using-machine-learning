@@ -9,6 +9,8 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Build;
+import android.os.CountDownTimer;
+import android.os.Environment;
 import android.provider.Telephony;
 import android.speech.tts.TextToSpeech;
 import android.support.v4.app.ActivityCompat;
@@ -26,7 +28,12 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -38,6 +45,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     private static final int N_SAMPLES = 200;
     private static final int PERMISSION_REQUEST_CODE = 1;
+    private static final String TAG = "MainActivity: " ;
+    private static final double ACC_THRESHOLD = 23;
     private static List<Float> x, y, z;
 
     private TextView downstairsTv, joggingTv, sittingTv, standingTv, upstairsTv, walkingTv;
@@ -52,6 +61,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private TextToSpeech textToSpeech;
 
     private String mText;
+
+    private boolean fallDetected = false;
+    private AlertDialog.Builder countdown;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -89,6 +101,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 String btn_text = "Start Monitoring";
                 if (action_btn.getText().equals(btn_text)) {
                     action_btn.setText("Stop Monitoring");
+                    fallDetected();
                     getSensorManager().registerListener(MainActivity.this, getSensorManager().getDefaultSensor(Sensor.TYPE_ACCELEROMETER), SensorManager.SENSOR_DELAY_GAME);
                 } else {
                     action_btn.setText("Start Monitoring");
@@ -145,10 +158,52 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     @Override
     public void onSensorChanged(SensorEvent event) {
-        activityPrediction();
-        x.add(event.values[0]);
-        y.add(event.values[1]);
-        z.add(event.values[2]);
+
+        if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
+            activityPrediction();
+            x.add(event.values[0]);
+            y.add(event.values[1]);
+            z.add(event.values[2]);
+
+        }
+    }
+
+    private void fallDetected() {
+        countdown = new AlertDialog.Builder(this)
+                .setTitle("Have you fallen? Please Respond!")
+                .setMessage("SMS will be sent automatically in 10 seconds")
+                .setNegativeButton("No, I'm alright.",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                dialog.cancel();
+                            }
+                        });
+
+        final AlertDialog alert = countdown.create();
+        alert.show();
+
+        final Timer timer = new Timer();
+        timer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                timer.cancel();
+                alert.dismiss();
+                sendSMS();
+            }
+        }, 10000);
+    }
+
+    private boolean isFallDetected(double x, double y, double z) {
+        double acceleration = this.calculateSumVector(x, y, z);
+        if (acceleration > ACC_THRESHOLD) {
+            return true;
+        }
+        return false;
+    }
+
+    private double calculateSumVector(double x, double y, double z) {
+        return Math.abs(x) + Math.abs(y) + Math.abs(z);
     }
 
     private void activityPrediction() {
@@ -160,12 +215,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
             results = classifier.predictProbabilities(toFloatArray(data));
 
-            downstairsTv.setText(Float.toString(round(results[0], 2)));
-            joggingTv.setText(Float.toString(round(results[1], 2)));
-            sittingTv.setText(Float.toString(round(results[2], 2)));
-            standingTv.setText(Float.toString(round(results[3], 2)));
-            upstairsTv.setText(Float.toString(round(results[4], 2)));
-            walkingTv.setText(Float.toString(round(results[5], 2)));
+            downstairsTv.setText("Downstairs: " + Float.toString(round(results[0], 2)));
+            joggingTv.setText("Jogging: " + Float.toString(round(results[1], 2)));
+            sittingTv.setText("Sitting: " + Float.toString(round(results[2], 2)));
+            standingTv.setText("Standing: " + Float.toString(round(results[3], 2)));
+            upstairsTv.setText("Upstairs: " + Float.toString(round(results[4], 2)));
+            walkingTv.setText("Walking: " + Float.toString(round(results[5], 2)));
 
             x.clear();
             y.clear();
@@ -218,17 +273,20 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
     public void sendSMS() {
-        String sms = "Help! I've fallen!!";
-        String pNumber = mText;
-        if (!TextUtils.isEmpty(sms) && !TextUtils.isEmpty(pNumber)) {
-            if (checkPermission()) {
-                SmsManager smsManager = SmsManager.getDefault();
-                smsManager.sendTextMessage(pNumber, null, sms, null, null);
-            } else {
-                Toast.makeText(this, "Permission denied", Toast.LENGTH_SHORT).show();
-            }
+        Log.d(TAG, "sendSMS: started");
+
+        try {
+            SmsManager smsManager = SmsManager.getDefault();
+            smsManager.sendTextMessage(mText, null, "Help! I've fallen!!", null, null);
+            Log.d(TAG, "sendSMS: sent!");
+        } catch (Exception e) {
+            Log.d(TAG, "sendSMS: failed to send!");
         }
     }
+
+    // TODO: 2019-06-02 detect fall!
+    // TODO: 2019-06-02 stop text to speech
+
 
     @Override
     protected void onPause() {
