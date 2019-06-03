@@ -41,7 +41,7 @@ import java.util.Random;
 import java.util.Timer;
 import java.util.TimerTask;
 
-public class MainActivity extends AppCompatActivity implements SensorEventListener, TextToSpeech.OnInitListener {
+public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
     private static final int N_SAMPLES = 200;
     private static final int PERMISSION_REQUEST_CODE = 1;
@@ -57,8 +57,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private TensorFlowClassifier classifier;
 
     private String[] labels = {"Downstairs", "Jogging", "Sitting", "Standing", "Upstairs", "Walking"};
-
-    private TextToSpeech textToSpeech;
 
     private String mText;
 
@@ -90,9 +88,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         walkingTv = findViewById(R.id.walking_prob);
 
         classifier = new TensorFlowClassifier(getApplicationContext());
-
-        textToSpeech = new TextToSpeech(this, this);
-        textToSpeech.setLanguage(Locale.US);
 
         action_btn = findViewById(R.id.activity_btn);
         action_btn.setOnClickListener(new View.OnClickListener() {
@@ -126,6 +121,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
                         mText = input.getText().toString();
+                        Log.d(TAG, "onClick: "+mText);
                     }
                 });
                 builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
@@ -215,12 +211,26 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
             results = classifier.predictProbabilities(toFloatArray(data));
 
-            downstairsTv.setText("Downstairs: " + Float.toString(round(results[0], 2)));
-            joggingTv.setText("Jogging: " + Float.toString(round(results[1], 2)));
-            sittingTv.setText("Sitting: " + Float.toString(round(results[2], 2)));
-            standingTv.setText("Standing: " + Float.toString(round(results[3], 2)));
-            upstairsTv.setText("Upstairs: " + Float.toString(round(results[4], 2)));
-            walkingTv.setText("Walking: " + Float.toString(round(results[5], 2)));
+            if (results == null || results.length == 0) {
+                return;
+            } else {
+                float max = -1;
+                int idx = -1;
+                for (int i = 0; i < results.length; i++) {
+                    if (results[i] > max) {
+                        idx = i;
+                        max = results[i];
+                    }
+                }
+                standingTv.setText(labels[idx]);
+            }
+//
+//            downstairsTv.setText("Downstairs: " + Float.toString(round(results[0], 2)));
+//            joggingTv.setText("Jogging: " + Float.toString(round(results[1], 2)));
+//            sittingTv.setText("Sitting: " + Float.toString(round(results[2], 2)));
+//            standingTv.setText("Standing: " + Float.toString(round(results[3], 2)));
+//            upstairsTv.setText("Upstairs: " + Float.toString(round(results[4], 2)));
+//            walkingTv.setText("Walking: " + Float.toString(round(results[5], 2)));
 
             x.clear();
             y.clear();
@@ -249,31 +259,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     }
 
-    @Override
-    public void onInit(int status) {
-        Timer timer = new Timer();
-        timer.scheduleAtFixedRate(new TimerTask() {
-            @Override
-            public void run() {
-                if (results == null || results.length == 0) {
-                    return;
-                }
-                float max = -1;
-                int idx = -1;
-                for (int i = 0; i < results.length; i++) {
-                    if (results[i] > max) {
-                        idx = i;
-                        max = results[i];
-                    }
-                }
-
-                textToSpeech.speak(labels[idx], TextToSpeech.QUEUE_ADD, null, Integer.toString(new Random().nextInt()));
-            }
-        }, 2000, 5000);
-    }
-
     public void sendSMS() {
         Log.d(TAG, "sendSMS: started");
+        Log.d(TAG, "sendSMS: "+mText);
 
         try {
             SmsManager smsManager = SmsManager.getDefault();
@@ -285,7 +273,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
     // TODO: 2019-06-02 detect fall!
-    // TODO: 2019-06-02 stop text to speech
 
 
     @Override
