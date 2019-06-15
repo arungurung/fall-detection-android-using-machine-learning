@@ -40,6 +40,7 @@ import java.util.Locale;
 import java.util.Random;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
@@ -49,19 +50,19 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private static final double ACC_THRESHOLD = 23;
     private static List<Float> x, y, z;
 
-    private TextView downstairsTv, joggingTv, sittingTv, standingTv, upstairsTv, walkingTv;
+    private TextView downstairsTv, joggingTv, sittingTv, standingTv, upstairsTv, walkingTv, falling, status;
     private Button action_btn, settings_btn;
 
     private float[] results;
 
     private TensorFlowClassifier classifier;
 
-    private String[] labels = {"Downstairs", "Jogging", "Sitting", "Standing", "Upstairs", "Walking"};
+    private String[] labels = {"Downstairs", "Jogging", "Sitting", "Standing", "Upstairs", "Walking", "fall"};
 
     private String mText;
 
     private boolean fallDetected = false;
-    private AlertDialog.Builder countdown;
+    private AlertDialog countdown;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -86,6 +87,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         standingTv = findViewById(R.id.standing_prob);
         upstairsTv = findViewById(R.id.upstairs_prob);
         walkingTv = findViewById(R.id.walking_prob);
+        status = findViewById(R.id.status);
+        falling = findViewById(R.id.fall_prob);
 
         classifier = new TensorFlowClassifier(getApplicationContext());
 
@@ -96,7 +99,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 String btn_text = "Start Monitoring";
                 if (action_btn.getText().equals(btn_text)) {
                     action_btn.setText("Stop Monitoring");
-                    fallDetected();
+//                    fallDetected();
                     getSensorManager().registerListener(MainActivity.this, getSensorManager().getDefaultSensor(Sensor.TYPE_ACCELEROMETER), SensorManager.SENSOR_DELAY_GAME);
                 } else {
                     action_btn.setText("Start Monitoring");
@@ -160,34 +163,74 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             x.add(event.values[0]);
             y.add(event.values[1]);
             z.add(event.values[2]);
-
         }
     }
 
     private void fallDetected() {
+
         countdown = new AlertDialog.Builder(this)
                 .setTitle("Have you fallen? Please Respond!")
                 .setMessage("SMS will be sent automatically in 10 seconds")
-                .setNegativeButton("No, I'm alright.",
-                        new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int which) {
-                                dialog.cancel();
-                            }
-                        });
-
-        final AlertDialog alert = countdown.create();
-        alert.show();
-
-        final Timer timer = new Timer();
-        timer.schedule(new TimerTask() {
+                .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        sendSMS();
+                    }
+                })
+                .setNegativeButton("No", null)
+                .create();
+        countdown.setOnShowListener(new DialogInterface.OnShowListener() {
+            private static final int SMS_MILLIS = 10000;
             @Override
-            public void run() {
-                timer.cancel();
-                alert.dismiss();
-                sendSMS();
+            public void onShow(final DialogInterface dialog) {
+                final Button defaultButton = countdown.getButton(AlertDialog.BUTTON_POSITIVE);
+                final CharSequence positiveButtonText = defaultButton.getText();
+                new CountDownTimer(SMS_MILLIS, 100){
+
+                    @Override
+                    public void onTick(long millisUntilFinished) {
+                        defaultButton.setText(String.format(
+                                Locale.getDefault(), "%s (%d)",
+                                positiveButtonText,
+                                TimeUnit.MILLISECONDS.toSeconds(millisUntilFinished)
+                        ));
+                    }
+
+                    @Override
+                    public void onFinish() {
+                        if (countdown.isShowing()) {
+                            countdown.setMessage("SMS Sent!");
+                            sendSMS();
+                        }
+                    }
+                }.start();
             }
-        }, 10000);
+        });
+        countdown.show();
+
+
+//        countdown = new AlertDialog.Builder(this)
+//                .setTitle("Have you fallen? Please Respond!")
+//                .setMessage("SMS will be sent automatically in 10 seconds")
+//                .setNegativeButton("No, I'm alright.",
+//                        new DialogInterface.OnClickListener() {
+//                            @Override
+//                            public void onClick(DialogInterface dialog, int which) {
+//                                dialog.cancel();
+//                            }
+//                        });
+//
+//        final AlertDialog alert = countdown.create();
+//        alert.show();
+//
+//        final Timer timer = new Timer();
+//        timer.schedule(new TimerTask() {
+//            @Override
+//            public void run() {
+//                timer.cancel();
+//                sendSMS();
+//            }
+//        }, 10000);
     }
 
     private boolean isFallDetected(double x, double y, double z) {
@@ -222,15 +265,22 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                         max = results[i];
                     }
                 }
-                standingTv.setText(labels[idx]);
+                status.setText(labels[idx]);
             }
-//
-//            downstairsTv.setText("Downstairs: " + Float.toString(round(results[0], 2)));
-//            joggingTv.setText("Jogging: " + Float.toString(round(results[1], 2)));
-//            sittingTv.setText("Sitting: " + Float.toString(round(results[2], 2)));
-//            standingTv.setText("Standing: " + Float.toString(round(results[3], 2)));
-//            upstairsTv.setText("Upstairs: " + Float.toString(round(results[4], 2)));
-//            walkingTv.setText("Walking: " + Float.toString(round(results[5], 2)));
+
+            downstairsTv.setText("Downstairs: " + Float.toString(round(results[0], 2)));
+            joggingTv.setText("Jogging: " + Float.toString(round(results[1], 2)));
+            sittingTv.setText("Sitting: " + Float.toString(round(results[2], 2)));
+            standingTv.setText("Standing: " + Float.toString(round(results[3], 2)));
+            upstairsTv.setText("Upstairs: " + Float.toString(round(results[4], 2)));
+            walkingTv.setText("Walking: " + Float.toString(round(results[5], 2)));
+            falling.setText("Fall: " + Float.toString(round(results[6], 2)));
+
+
+
+            if ((round(results[6], 2)) > 0.2){
+                fallDetected();
+            }
 
             x.clear();
             y.clear();
@@ -266,13 +316,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         try {
             SmsManager smsManager = SmsManager.getDefault();
             smsManager.sendTextMessage(mText, null, "Help! I've fallen!!", null, null);
+            Toast.makeText(this, "SMS Sent!", Toast.LENGTH_SHORT).show();
             Log.d(TAG, "sendSMS: sent!");
         } catch (Exception e) {
             Log.d(TAG, "sendSMS: failed to send!");
+            Toast.makeText(this, "Failed to send sms!", Toast.LENGTH_SHORT).show();
         }
     }
-
-    // TODO: 2019-06-02 detect fall!
 
 
     @Override
